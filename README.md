@@ -2,7 +2,8 @@
 
 A fast C++17 state-vector quantum circuit simulator for Apple Silicon, with a
 gate-fusion pass and an Apple Accelerate (`cblas_zgemm`) dense-gate kernel path.
-Every benchmark is verified to float epsilon against a Qiskit Aer golden state.
+Every benchmark is verified to float epsilon against an exact Qiskit reference
+state, and timed against Qiskit's production AerSimulator backend.
 
 The point isn't "a new way to simulate circuits" — it's an honestly benchmarked
 characterization of **where matrix-coprocessor acceleration helps state-vector
@@ -124,19 +125,52 @@ QUBO↔Ising round-trip).
 
 ## Benchmarks (honest)
 
-Measured on Apple Silicon (RelWithDebInfo). Golden baseline: **Qiskit Aer 2.2.3**
-(`Statevector.from_instruction`); correctness gate is max-abs-diff ≤ 1e-9.
+Measured on Apple Silicon (RelWithDebInfo). Two **separate** baselines, stated
+precisely so the claims survive scrutiny:
 
-| Circuit   | dim     | max-abs-diff vs Aer | quasar (mean) | golden (Aer) |
-|-----------|---------|---------------------|---------------|--------------|
-| QFT-20    | 2²⁰     | 1.7e-18             | ~305 ms       | ~1330 ms     |
-| GHZ-16    | 2¹⁶     | 1.1e-16             | ~1.2 ms       | ~5.8 ms      |
-| QAOA-12   | 2¹²     | 1.1e-16             | ~0.9 ms       | ~7.3 ms      |
-| Grover-10 | 2¹⁰     | 1.7e-12             | ~2.0 ms       | ~2670 ms*    |
+- **Correctness golden:** `qiskit.quantum_info.Statevector` — an exact numpy
+  reference. Gate: max-abs-diff ≤ 1e-9 (typically ~1e-17).
+- **Performance baseline:** the real `qiskit_aer.AerSimulator(method="statevector")`
+  — Aer's production C++ backend (its own gate fusion + threading), timing only
+  `.run()` after a warmup.
 
-\* The Grover golden time is dominated by Qiskit's multi-controlled-X
-decomposition during `from_instruction`, not raw simulation — so it overstates
-Aer's true sim cost. Treat it as "transpile + simulate," not a clean sim number.
+> Honesty note: an earlier version of this harness mistakenly timed the slow
+> `quantum_info.Statevector` and labeled it "Aer." That inflated the apparent
+> speedup ~5×. The numbers below are vs the **real AerSimulator**.
+
+### Correctness (vs exact reference)
+
+| Circuit   | dim   | max-abs-diff |
+|-----------|-------|--------------|
+| QFT-18    | 2¹⁸   | 3.7e-18      |
+| QAOA-18   | 2¹⁸   | 3.5e-17      |
+| GHZ-16    | 2¹⁶   | 1.1e-16      |
+| Grover-10 | 2¹⁰   | 1.7e-12      |
+
+### Speed vs Qiskit AerSimulator (the honest comparison)
+
+quasar's fastest mode (`--fuse`) vs the real AerSimulator, mean ms:
+
+| Circuit | quasar `--fuse` | AerSimulator | ratio |
+|---------|-----------------|--------------|-------|
+| QFT-18  | 48              | 73           | 1.5×* |
+| QFT-20  | 188             | 214          | 1.14× |
+| QFT-21  | 390             | 412          | 1.06× |
+| QAOA-18 | 29              | 40           | 1.36× |
+| QAOA-20 | 118             | 154          | 1.30× |
+| QAOA-21 | 239             | 326          | 1.36× |
+
+\* The 18-qubit QFT ratio is inflated by Aer's per-`.run()` job + statevector-
+serialization overhead (the state is only ~4 MB). As N grows and compute
+dominates, the QFT ratio settles to **~parity** (1.06× at 21q); the QAOA
+advantage (~1.3×) is **stable across sizes** — that's the real win.
+
+**Honest summary:** quasar is **at parity** with Qiskit's production AerSimulator
+on QFT and **~1.3× faster on QAOA-style circuits**, for CPU statevector simulation
+at 18–21 qubits — with a from-scratch simulator. Aer is general-purpose (noise,
+multiple methods, GPU); quasar is a specialized CPU statevector simulator, so
+edging out a general tool on a narrow case is the expected shape of this result.
+Absolute ms are machine/load dependent; the **ratios** are the reproducible claim.
 
 ### The zgemm crossover (headline finding)
 
@@ -174,8 +208,9 @@ End-to-end mean latency at **18 qubits** (2¹⁸ amplitudes), before vs after:
 | QAOA-18 | fused       | 188.6       | 29.2       | 6.5x    |
 | QAOA-18 | fused+zgemm | 67.8        | 43.5       | 1.56x   |
 
-(Golden Aer times: QFT-18 ~255 ms, QAOA-18 ~189 ms. Correctness gate still
-max-abs-diff ≤ 1e-9 in every mode.)
+(Real AerSimulator times: QFT-18 ~73 ms, QAOA-18 ~40 ms. Correctness gate still
+max-abs-diff ≤ 1e-9 in every mode. See the speed table above for the honest
+quasar-vs-Aer comparison across sizes.)
 
 The plain `--fuse` path is now the fastest mode for both circuits, and it **beats the
 unfused sweep** — the goal of the session. The big lever is diagonal-awareness: QFT
