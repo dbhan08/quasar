@@ -1,0 +1,38 @@
+# --- never commit ---
+RESUME.md
+.env
+.env.*
+
+# --- C++ / CMake ---
+build/
+cmake-build-*/
+*.o
+*.obj
+*.a
+*.dylib
+*.so
+*.out
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+.cache/
+
+# --- Python (bench harness) ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.poetry/
+*.egg-info/
+.pytest_cache/
+
+# --- bench / data artifacts ---
+*.json.golden
+bench_out/
+*.state
+*.npy
+
+# --- macOS / editors ---
+.DS_Store
+.idea/
+.vscode/
