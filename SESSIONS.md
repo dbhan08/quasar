@@ -115,20 +115,31 @@ Completed: 2026-06-19
 Completed: 2026-06-19
 
 ## Session 8 — QAOA portfolio-optimization capstone
-- [ ] `yfinance` fetcher: pull historical daily returns for ~8 chosen tickers; compute
-      expected-return vector μ and covariance Σ.
-- [ ] Encode "select K of N assets, maximize μ-tilt − risk penalty" as an Ising/QUBO →
-      a cost Hamiltonian.
-- [ ] Build the QAOA circuit (cost + mixer layers, p≥1) as a `quasar` `Circuit`; run it
-      on the simulator; sample the bitstring → chosen basket.
-- [ ] Classical check: brute-force the optimum over all baskets (feasible at N≈8) and a
-      simple classical optimizer; confirm QAOA converges to / near the optimum.
-- [ ] Tests: tiny portfolio (N=4) where the optimal basket is hand-verifiable; QAOA
-      objective is within tolerance of brute-force optimum.
-- [ ] Update `README.md` with the capstone demo + the honesty framing (optimization, not
+- [x] `yfinance` fetcher: pull historical daily returns for ~8 chosen tickers; compute
+      expected-return vector μ and covariance Σ. (try/except + `--offline`; live fetch
+      refreshes the bundled `capstone/data/returns_sample.csv` for reproducibility.)
+- [x] Encode "select K of N assets, maximize μ-tilt − risk penalty" as an Ising/QUBO →
+      a cost Hamiltonian. (QUBO with cardinality penalty → Ising Z fields h_i + ZZ J_ij.)
+- [x] Build the QAOA circuit (cost + mixer layers, p≥1); run it on the simulator; sample
+      the bitstring → chosen basket. (Emitted as OpenQASM 2.0 — only h/rz/cx/rx, all
+      already parsed by quasar — bridged via `./build/quasar run` for full probabilities.)
+- [x] Classical check: brute-force the optimum over all baskets (feasible at N=8);
+      confirm QAOA converges to / near the optimum.
+- [x] Tests: tiny portfolio (N=4) where the optimal basket is hand-verifiable; QAOA
+      objective within tolerance of brute-force; QUBO↔Ising round-trip. (5 pytest cases,
+      all green via `.venv/bin/python -m pytest capstone/`.)
+- [x] Update `README.md` with the capstone demo + the honesty framing (optimization, not
       prediction; no edge, no money).
 - **Done when:** `quasar` runs QAOA on a real ~8-stock portfolio and its chosen basket
       matches the brute-force optimum within tolerance, with tests passing.
+      RESULT: live yfinance pull of 8 tickers × 500 trading days (~2y), K=4. p=2 QAOA on
+      quasar selects [GOOGL, JPM, XOM, JNJ] = the brute-force optimum (cost gap 0.0).
+      No C++ changes needed — `quasar run` already prints the full probability vector;
+      `ctest` stays 44/44. HONEST CAVEAT: p=1 does NOT reach the optimum on this instance
+      (p=2 does), and the result is sensitive to the cardinality-penalty scale — a
+      too-large penalty flattens the QAOA distribution to near-uniform and the optimum is
+      lost, so a just-binding penalty is used.
+Completed: 2026-06-23
 
 ## Session 9 — Live solver-comparison dashboard
 - [ ] Streamlit dashboard that, on a refresh timer, re-pulls recent prices and re-solves

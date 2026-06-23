@@ -64,6 +64,64 @@ X, Y, Z, H, S, T, RX(θ), RY(θ), RZ(θ), Phase(λ); CNOT, CZ, SWAP, and arbitra
 single-control controlled gates. Algorithms: QFT, GHZ, Grover, ring-Ising QAOA
 ansatz.
 
+## Portfolio optimization (capstone)
+
+A real QAOA portfolio optimizer that runs **on the quasar simulator** and shows
+its chosen basket matches the brute-force classical optimum.
+
+> **Honesty first.** This is an *optimization* demo, not a prediction. It picks
+> the best mix of a **fixed** set of assets under a mean-variance objective. It
+> does **not** predict prices, **not** beat the market, and makes **no** money
+> claim — there is no trading edge here. At small N the QAOA result is *expected*
+> to match the classical optimum; that coincidence is the point — it's
+> verifiable correctness, not a letdown.
+
+What it does: pull ~2 years of daily returns for 8 tickers (AAPL, MSFT, GOOGL,
+AMZN, JPM, XOM, JNJ, PG) via yfinance, compute the expected-return vector μ and
+covariance Σ, encode "pick exactly K of N assets maximizing `q·μᵀx − xᵀΣx`" as a
+QUBO with a cardinality penalty, map it to an Ising model (Z fields + ZZ
+couplings), emit a `p`-layer QAOA circuit as **OpenQASM 2.0** (only `h`, `rz`,
+`cx`, `rx` — all parsed by quasar), simulate it with `./build/quasar run` to get
+the full probability distribution, optimize the QAOA angles (grid warm start +
+COBYLA), and take the most-probable feasible bitstring as the basket. Finally it
+brute-forces the true optimum over all exactly-K baskets (feasible at N=8) and
+prints the comparison.
+
+Run it (bundled CSV, fully offline and reproducible):
+
+```sh
+.venv/bin/python capstone/portfolio_qaoa.py --offline
+```
+
+Drop `--offline` to fetch fresh prices from yfinance; a successful live fetch
+refreshes `capstone/data/returns_sample.csv` so the offline path stays current.
+
+Example output (8 assets, pick K=4, p=2 QAOA layers):
+
+```
+assets (N=8): AAPL, MSFT, GOOGL, AMZN, JPM, XOM, JNJ, PG
+select exactly K=4, q-tilt=0.5, QAOA layers p=2, quasar evals=90
+--------------------------------------------------------------------
+QAOA basket       : ['GOOGL', 'JPM', 'XOM', 'JNJ']
+  objective C(x)  : -0.240496   (most-probable feasible, p=0.0173)
+brute-force basket: ['GOOGL', 'JPM', 'XOM', 'JNJ']
+  objective C(x)  : -0.240496
+--------------------------------------------------------------------
+MATCH: YES -- QAOA found the classical optimum
+cost gap (QAOA - brute): 0.000000e+00
+```
+
+Honest caveats: `p=1` QAOA does **not** reach the optimum on this 8-asset
+instance — `p=2` does, and the result is sensitive to the penalty scale (a
+too-large cardinality penalty flattens the QAOA distribution into near-uniform
+noise and the optimum gets lost). The script uses a just-binding penalty for
+that reason. The feasible subspace is 70 of 256 states, so even the optimal
+bitstring carries only ~2% probability — what's verified is that it is the
+*most-probable feasible* state and that it equals the brute-force optimum.
+
+Tests: `.venv/bin/python -m pytest capstone/` (N=4 hand-verifiable portfolio +
+QUBO↔Ising round-trip).
+
 ## Benchmarks (honest)
 
 Measured on Apple Silicon (RelWithDebInfo). Golden baseline: **Qiskit Aer 2.2.3**
